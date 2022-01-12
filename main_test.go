@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/wujiyu115/yuqueg"
+	"strings"
 	"testing"
 )
 
@@ -59,4 +60,19 @@ func TestTree(t *testing.T) {
 		t.Fail()
 	}
 	fmt.Printf("%s", string(b))
+}
+
+func TestGetFileName(t *testing.T) {
+
+	f := GetUrlFileName("https://cdn.nlark.com/yuque/0/2021/png/290656/1639644772671-7debb2e7-028f-46f6-a9b8-9987d59efcd3.png#clientId=u26616665-88ca-4&from=paste&height=270&id=u976622e7&margin=%5Bobject%20Object%5D&name=image.png&originHeight=539&originWidth=1045&originalType=binary&ratio=1&size=190770&status=done&style=none&taskId=u0c45d547-18a5-4c38-9096-45d7d1a5a49&width=522.5")
+	assert.Equal(t, "1639644772671-7debb2e7-028f-46f6-a9b8-9987d59efcd3.png", f)
+}
+
+func TestPath(t *testing.T) {
+
+	var savePath string
+	savePath = "/Users/seven/Desktop/kb/6.架构/jxgz.md"
+	mdPath := savePath[:strings.LastIndex(savePath, "/")]
+
+	assert.Equal(t, "/Users/seven/Desktop/kb/6.架构", mdPath)
 }
