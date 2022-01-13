@@ -25,18 +25,19 @@ const (
 	// MaxConcurrency https://www.yuque.com/yuque/developer/api#5b3a1535
 	MaxConcurrency = 20
 	Duration       = "1.4s"
-	SaveRootPath   = "/Users/seven/Desktop/kb"
 )
 
 var (
-	token string
-	ns    string
+	token  string
+	ns     string
+	target string
 )
 
 func main() {
 
 	flag.StringVar(&token, "token", "", "token")
 	flag.StringVar(&ns, "ns", "", "owner/repo")
+	flag.StringVar(&target, "target", "/Users/seven/Desktop/kb2", "save path")
 	flag.Parse()
 	if token == "" {
 		panic("token must setting")
@@ -54,8 +55,14 @@ func main() {
 	jobc := make(chan Job, 100000)
 	go buildJob(jobc, tree)
 
+	err = os.MkdirAll(target, os.ModePerm)
+	if err != nil {
+		panic(err)
+	}
 	//step: 3
 	startDownload(jobc, yu, ns)
+
+	fmt.Print("下载结束\n")
 
 }
 
@@ -125,10 +132,7 @@ func treeify(toc []yuqueg.RepoTocData) []*Node {
 }
 
 func startDownload(jobc <-chan Job, yu *yuqueg.Service, ns string) {
-	err := os.MkdirAll(ns, os.ModePerm)
-	if err != nil {
-		panic(err)
-	}
+
 	//防止main协程退出
 	wg := sync.WaitGroup{}
 	//并发控制
@@ -142,26 +146,31 @@ func startDownload(jobc <-chan Job, yu *yuqueg.Service, ns string) {
 			time.Sleep(d)
 		}
 	}()
-
 	for {
 		select {
 		case <-runChan:
 			if err := sem.Acquire(context.Background(), 1); err == nil {
-				job, _ := <-jobc
-				wg.Add(1)
-				go func() {
-					//fire download
-					doDownloadDoc(job, yu, ns)
-					wg.Done()
-					sem.Release(1)
-				}()
+				job, ok := <-jobc
+				if ok {
+					wg.Add(1)
+					go func() {
+						//fire download
+						doDownloadDoc(job, yu, ns)
+						wg.Done()
+						sem.Release(1)
+					}()
+				} else {
+					fmt.Printf("下载完成 \n")
+					wg.Wait()
+					return
+				}
 			} else {
 				fmt.Println(err.Error())
 			}
+
 		}
 	}
-	fmt.Println("下载结束")
-	wg.Wait()
+
 }
 
 func doDownloadDoc(job Job, yu *yuqueg.Service, ns string) {
@@ -241,7 +250,8 @@ func DownloadFile(filepath string, url string) error {
 
 func buildJob(jobc chan<- Job, tree []*Node) {
 	defer close(jobc)
-	doParse(jobc, tree, SaveRootPath)
+	doParse(jobc, tree, target)
+	fmt.Printf("解析任务完成。\n")
 }
 
 func doParse(jobc chan<- Job, tree []*Node, parentPath string) {
