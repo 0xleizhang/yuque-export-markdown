@@ -5,7 +5,7 @@ import (
 	"flag"
 	"fmt"
 	md "github.com/JohannesKaufmann/html-to-markdown"
-	"github.com/wujiyu115/yuqueg"
+	"github.com/seven4x/yuqueg"
 	"golang.org/x/sync/semaphore"
 	"io"
 	"io/ioutil"
@@ -20,13 +20,44 @@ import (
 )
 
 const (
-	IMG_DOMAIN = ""
-	IMG_REG    = "\\(https?://.+\\.(jpg|gif|png)\\S*\\)"
-	//https://www.yuque.com/yuque/developer/api#5b3a1535
+	ImgDomain = ""
+	ImgReg    = "\\(https?://.+\\.(jpg|gif|png)\\S*\\)"
+	// MaxConcurrency https://www.yuque.com/yuque/developer/api#5b3a1535
 	MaxConcurrency = 20
-	Duration       = 1.4
+	Duration       = "1.4s"
 	SaveRootPath   = "/Users/seven/Desktop/kb"
 )
+
+var (
+	token string
+	ns    string
+)
+
+func main() {
+
+	flag.StringVar(&token, "token", "", "token")
+	flag.StringVar(&ns, "ns", "", "owner/repo")
+	flag.Parse()
+	if token == "" {
+		panic("token must setting")
+	}
+	fmt.Printf("using token: %s \n", token)
+	//step :1获取 列表树结构
+	yu := yuqueg.NewService(token)
+	toc, err := yu.Repo.GetToc(ns)
+	if err != nil {
+		panic(err.Error())
+	}
+	tree := treeify(toc.Data)
+
+	//step :2 构建下载任务
+	jobc := make(chan Job, 100000)
+	go buildJob(jobc, tree)
+
+	//step: 3
+	startDownload(jobc, yu, ns)
+
+}
 
 type Node struct {
 	ParentId string
@@ -46,6 +77,8 @@ func (n *Node) addSub(node *Node) {
 	}
 	n.Child = append(n.Child, node)
 }
+
+//list convert to tree
 func treeify(toc []yuqueg.RepoTocData) []*Node {
 	nodes := make([]*Node, 0)
 	m := make(map[string]*Node)
@@ -91,38 +124,6 @@ func treeify(toc []yuqueg.RepoTocData) []*Node {
 	return res
 }
 
-var (
-	token string
-	ns    string
-)
-
-func main() {
-
-	flag.StringVar(&token, "token", "", "token")
-	flag.StringVar(&ns, "ns", "", "owner/repo")
-	flag.Parse()
-	if token == "" {
-		panic("token must setting")
-	}
-	fmt.Printf("using token: %s", token)
-	//step :1
-	yu := yuqueg.NewService(token)
-	toc, err := yu.Repo.GetToc(ns)
-	if err != nil {
-		panic(err.Error())
-	}
-	tree := treeify(toc.Data)
-
-	//step :2
-	jobc := make(chan Job, 100000)
-	go buildJob(jobc, tree)
-
-	//stop: 3
-
-	startDownload(jobc, yu, ns)
-
-}
-
 func startDownload(jobc <-chan Job, yu *yuqueg.Service, ns string) {
 	err := os.MkdirAll(ns, os.ModePerm)
 	if err != nil {
@@ -133,11 +134,11 @@ func startDownload(jobc <-chan Job, yu *yuqueg.Service, ns string) {
 	//并发控制
 	sem := semaphore.NewWeighted(MaxConcurrency)
 	runChan := make(chan struct{})
+	d, _ := time.ParseDuration(Duration)
 	go func() {
 		for {
 			//限流
 			runChan <- struct{}{}
-			d, _ := time.ParseDuration("1.4s")
 			time.Sleep(d)
 		}
 	}()
@@ -150,7 +151,7 @@ func startDownload(jobc <-chan Job, yu *yuqueg.Service, ns string) {
 				wg.Add(1)
 				go func() {
 					//fire download
-					doDownload(job, yu, ns)
+					doDownloadDoc(job, yu, ns)
 					wg.Done()
 					sem.Release(1)
 				}()
@@ -162,11 +163,12 @@ func startDownload(jobc <-chan Job, yu *yuqueg.Service, ns string) {
 	fmt.Println("下载结束")
 	wg.Wait()
 }
-func doDownload(job Job, yu *yuqueg.Service, ns string) {
+
+func doDownloadDoc(job Job, yu *yuqueg.Service, ns string) {
 	fmt.Printf("start download: %s \n", job.SavePath)
 	doc, err := yu.Doc.Get(ns, job.Data.Slug, &yuqueg.DocGet{Raw: 1})
 	if err != nil {
-		fmt.Printf("fetch doc api error: %s", err.Error())
+		fmt.Printf("fetch %s doc,error: %s \n", job.SavePath, err.Error())
 		return
 	}
 	var html string
@@ -180,16 +182,16 @@ func doDownload(job Job, yu *yuqueg.Service, ns string) {
 	mdPath := job.SavePath[:strings.LastIndex(job.SavePath, "/")]
 	replaceMd := downloadImgAndReplace(markdown, mdPath)
 	if err != nil {
-		fmt.Printf("convert error: %s", err.Error())
+		fmt.Printf("convert error: %s \n", err.Error())
 	}
 	if err := ioutil.WriteFile(job.SavePath, []byte(replaceMd), 0644); err != nil {
-		fmt.Printf("write error %s", err.Error())
+		fmt.Printf("write error %s \n", err.Error())
 	}
 	fmt.Printf("download success : %s \n", job.SavePath)
 }
 
 func downloadImgAndReplace(markdown string, mdPath string) string {
-	reg := regexp.MustCompile(IMG_REG)
+	reg := regexp.MustCompile(ImgReg)
 	imgs := reg.FindAllString(markdown, -1)
 	fmt.Printf("find pics :%v\n", imgs)
 	for i, _ := range imgs {
@@ -270,6 +272,6 @@ func doParse(jobc chan<- Job, tree []*Node, parentPath string) {
 }
 
 func convertHTML2Markdown(html string) (string, error) {
-	converter := md.NewConverter(IMG_DOMAIN, true, nil)
+	converter := md.NewConverter(ImgDomain, true, nil)
 	return converter.ConvertString(html)
 }
