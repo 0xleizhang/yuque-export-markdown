@@ -51,14 +51,15 @@ func main() {
 	}
 	tree := treeify(toc.Data)
 
-	//step :2 构建下载任务
-	jobc := make(chan Job, 100000)
-	go buildJob(jobc, tree)
-
 	err = os.MkdirAll(target, os.ModePerm)
 	if err != nil {
 		panic(err)
 	}
+
+	//step :2 构建下载任务
+	jobc := make(chan Job, 100000)
+	go buildJob(jobc, tree)
+
 	//step: 3
 	startDownload(jobc, yu, ns)
 
@@ -260,7 +261,7 @@ func doParse(jobc chan<- Job, tree []*Node, parentPath string) {
 	})
 	for i, _ := range tree {
 		node := tree[i]
-		title := strings.TrimSpace(node.Data.Title)
+		title := strings.Replace(strings.TrimSpace(node.Data.Title), "/", "-", -1)
 		if node.Child != nil { //树的深度优先遍历
 			savePath := parentPath + "/" + title
 			err := os.MkdirAll(savePath, os.ModePerm)
