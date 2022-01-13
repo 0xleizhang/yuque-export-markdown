@@ -21,7 +21,7 @@ import (
 
 const (
 	IMG_DOMAIN = ""
-	IMG_REG    = "https?://.+\\.(jpg|gif|png)"
+	IMG_REG    = "\\(https?://.+\\.(jpg|gif|png)\\S*\\)"
 	//https://www.yuque.com/yuque/developer/api#5b3a1535
 	MaxConcurrency = 20
 	Duration       = 1.4
@@ -194,12 +194,13 @@ func downloadImgAndReplace(markdown string, mdPath string) string {
 	fmt.Printf("find pics :%v\n", imgs)
 	for i, _ := range imgs {
 		img := imgs[i]
+		imgUrl := imgs[i][1 : len(imgs[i])-1]
 		_ = os.MkdirAll(mdPath+"/assert", os.ModePerm)
-		p := "assert/" + GetUrlFileName(img)
-		if err := DownloadFile(mdPath+"/"+p, img); err != nil {
+		p := "assert/" + GetUrlFileName(imgUrl)
+		if err := DownloadFile(mdPath+"/"+p, imgUrl); err != nil {
 			_ = fmt.Errorf(err.Error())
 		} else {
-			strings.Replace(markdown, img, p, -1)
+			markdown = strings.Replace(markdown, imgUrl, p, -1)
 			fmt.Printf("download pic : %s => %s\n", img, p)
 		}
 	}
@@ -247,20 +248,21 @@ func doParse(jobc chan<- Job, tree []*Node, parentPath string) {
 	})
 	for i, _ := range tree {
 		node := tree[i]
+		title := strings.TrimSpace(node.Data.Title)
 		if node.Child != nil { //树的深度优先遍历
-			savePath := parentPath + "/" + node.Data.Title
+			savePath := parentPath + "/" + title
 			err := os.MkdirAll(savePath, os.ModePerm)
 			if err != nil {
 				panic(err)
 			}
 			jobc <- Job{
-				SavePath: savePath + "/" + node.Data.Title + ".md",
+				SavePath: savePath + "/" + title + ".md",
 				Data:     node.Data,
 			}
 			doParse(jobc, node.Child, savePath)
 		} else {
 			jobc <- Job{
-				SavePath: parentPath + "/" + node.Data.Title + ".md",
+				SavePath: parentPath + "/" + title + ".md",
 				Data:     node.Data,
 			}
 		}

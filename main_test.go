@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/wujiyu115/yuqueg"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -75,4 +76,27 @@ func TestPath(t *testing.T) {
 	mdPath := savePath[:strings.LastIndex(savePath, "/")]
 
 	assert.Equal(t, "/Users/seven/Desktop/kb/6.架构", mdPath)
+}
+func TestRegImg(t *testing.T) {
+
+	md := "client has token using cache\n\n​\n\n背景\n\n![image.png](https://cdn.nlark.com/yuque/0/2021/png/290656/1636079522661-54a201c5-2af5-4b00-b201-ce94d2491c76.png#clientId=u0a9741cd-0128-4&from=paste&height=163&id=u094e4d6a&margin=%5Bobject%20Object%5D&name=image.png&originHeight=326&originWidth=1712&originalType=binary&ratio=1&size=337684&status=done&style=none&taskId=ua53c87c4-b9b7-483c-9b93-736d1a0e493&width=856)\n\nold version :\n\n![image.png](https://cdn.nlark.com/yuque/0/2021/png/290656/1636079562981-ca077d76-2c62-4df4-992b-240b0b41c641.png#clientId=u0a9741cd-0128-4&from=paste&height=263&id=ue6c65a63&margin=%5Bobject%20Object%5D&name=image.png&originHeight=526&originWidth=1720&originalType=binary&ratio=1&size=307696&status=done&style=none&taskId=u940e3129-c812-4ef7-8f1f-f79730e8e95&width=860)\n\nnew version:\n\n![image.png](https://cdn.nlark.com/yuque/0/2021/png/290656/1636079585840-b6fecacd-7ce0-4f6d-82d4-8e9abccd4055.png#clientId=u0a9741cd-0128-4&from=paste&height=514&id=ua19800f7&margin=%5Bobject%20Object%5D&name=image.png&originHeight=1028&originWidth=1754&originalType=binary&ratio=1&size=1099746&status=done&style=none&taskId=u0cf52e77-9753-43ed-836a-2e1a3194a61&width=877)\n\nbug逻辑\n\n​\n\n\\##### expireAfterWrite 没有生效\n\n​\n\nclientCache 使用的guava 使用的是LRU算法，过期时间默认3500秒如果在3500内有取用\\*\\*缓存对象(value)\\*\\*会继续保存重新计时，于是\\*\\*缓存对象(value)\\*\\*的实际存在便会超过3500秒\n\n\\*\\*缓存对象(value)\\*\\*是调用openApi client对象，对象包含了STS token信息，但是STS却是有\\*\\*有效期\\*\\*的，STS有效期由创建AcsClient方法控制，目前设置是3600秒\n\n总结：当多次取用缓存对象时间间隔在3500秒，连续时间超过3600秒，取出的client对象就是过期token的错误对象。\n\n​\n\n​\n\n反思：\n\n如果你要缓存的对象本身具有时效性，注意你是用的缓存算法\n\n​\n\n​\n\n​\n\n扩展：\n\n​\n\nexpireAfterAccess: 在指定的过期时间内没有读写，缓存数据即失效\n\nexpireAfterWrite: 在指定的过期时间内没有写入，缓存数据即失效\n\nrefreshAfterWrite: 在指定的过期时间之后访问时，刷新缓存数据，在刷新任务未完成之前，其他线程返回旧值"
+
+	reg := regexp.MustCompile("\\(https?://.+\\.(jpg|gif|png)\\S*\\)")
+
+	imgs := reg.FindAllString(md, -1)
+
+	assert.NotNil(t, imgs)
+
+	img := imgs[0][1 : len(imgs[0])-1]
+	assert.Equal(t, "https://cdn.nlark.com/yuque/0/2021/png/290656/1636079522661-54a201c5-2af5-4b00-b201-ce94d2491c76.png#clientId=u0a9741cd-0128-4&from=paste&height=163&id=u094e4d6a&margin=%5Bobject%20Object%5D&name=image.png&originHeight=326&originWidth=1712&originalType=binary&ratio=1&size=337684&status=done&style=none&taskId=ua53c87c4-b9b7-483c-9b93-736d1a0e493&width=856", img)
+
+	ur := GetUrlFileName(img)
+
+	assert.Equal(t, "1636079522661-54a201c5-2af5-4b00-b201-ce94d2491c76.png", ur)
+
+}
+
+func TestTrim(t *testing.T) {
+	s := strings.TrimSpace(" 云 一股股 ")
+	assert.Equal(t, "云 一股股", s)
 }
